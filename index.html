@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <title>テスト</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family:'Noto Sans JP',sans-serif; }
+    body { display:flex; flex-direction:column; height:100vh; background:#f1f8e9; color:#333; }
+
+    .header{
+      background:#2e7d32;
+      color:#fff;
+      padding:14px 20px;
+      flex-shrink:0;
+      font-weight:800;
+      letter-spacing:0.2px;
+    }
+
+    .chat-area{
+      flex:1;
+      overflow-y:auto;
+      padding:16px;
+      background:#f1f8e9;
+    }
+
+    .input-bar{
+      flex-shrink:0;
+      display:flex;
+      align-items:flex-end;
+      gap:8px;
+      padding:12px 16px;
+      background:#fff;
+      border-top:1px solid #e0e0e0;
+    }
+
+    .message{
+      display:flex;
+      gap:8px;
+      margin-bottom:14px;
+      max-width:80%;
+      align-items:flex-start;
+    }
+    .message.user{ margin-left:auto; flex-direction:row-reverse; }
+    .message.ai{ margin-right:auto; }
+
+    .icon{
+      width:36px; height:36px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:18px; flex-shrink:0;
+    }
+    .message.user .icon{ background:#2e7d32; color:#fff; }
+    .message.ai .icon{ background:#e8f5e9; color:#1b5e20; }
+
+    .bubble{
+      padding:10px 16px;
+      border-radius:18px;
+      line-height:1.7;
+      word-break:break-word;
+      font-size:14px;
+      background:transparent;
+    }
+    .message.user .bubble{
+      background:#2e7d32;
+      color:#fff;
+      border-bottom-right-radius:4px;
+    }
+    .message.ai .bubble{
+      background:#fff;
+      color:#333;
+      border:1px solid #dfe7df;
+      border-bottom-left-radius:4px;
+    }
+
+    .typing-indicator .bubble{
+      background:#fff;
+      color:#333;
+      border:1px solid #dfe7df;
+      border-bottom-left-radius:4px;
+      padding:10px 16px;
+      border-radius:18px;
+    }
+    .spinner{
+      width:20px; height:20px;
+      border:3px solid #e0e0e0;
+      border-top:3px solid #2e7d32;
+      border-radius:50%;
+      animation:spin 0.8s linear infinite;
+      margin:8px 0;
+    }
+    @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+
+    textarea#chatInput{
+      flex:1;
+      border:2px solid #d0d0d0;
+      border-radius:24px;
+      padding:10px 16px;
+      resize:none;
+      font-size:15px;
+      font-family:inherit;
+      rows:1;
+      max-height:120px;
+      outline:none;
+      background:#fff;
+      color:#333;
+    }
+    textarea#chatInput:focus{ border-color:#2e7d32; }
+
+    button#sendBtn{
+      width:48px; height:48px;
+      border-radius:50%;
+      background:linear-gradient(135deg,#388e3c,#66bb6a,#a5d6a7);
+      color:#fff;
+      border:none;
+      cursor:pointer;
+      font-size:20px;
+      flex-shrink:0;
+    }
+    button#sendBtn:disabled{
+      opacity:0.6;
+      cursor:not-allowed;
+    }
+
+    /* 引用元アコーディオンCSS */
+    .sources-wrapper{
+      margin-top:6px;
+      margin-left:44px; /* アイコン幅36px+gap8px分 */
+    }
+    .sources-toggle{
+      cursor:pointer;
+      font-size:12px;
+      color:#333;
+      padding:6px 14px;
+      border:none;
+      border-radius:16px;
+      background:#f5c518;
+      display:inline-block;
+      user-select:none;
+      font-weight:600;
+    }
+    .sources-toggle:hover{ background:#e0b000; }
+    .sources-content{
+      max-height:0;
+      overflow:hidden;
+      transition:max-height 0.3s ease;
+      padding:0 12px;
+    }
+    .sources-content.open{
+      max-height:500px;
+      padding:8px 12px;
+    }
+    .sources-content .source-item{
+      margin-bottom:10px;
+      border-bottom:1px solid #eee;
+      padding-bottom:8px;
+    }
+    .sources-content .source-item:last-child{
+      border-bottom:none;
+      margin-bottom:0;
+    }
+    .sources-content a{
+      display:block;
+      color:#1a73e8;
+      text-decoration:none;
+      font-size:13px;
+      word-break:break-all;
+    }
+    .sources-content a:hover{ text-decoration:underline; }
+    .sources-content .source-quote{
+      font-size:11px;
+      color:#666;
+      margin-top:4px;
+      line-height:1.5;
+    }
+
+    @media(max-width:600px){
+      .message{ max-width:90%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">テスト</div>
+  <div id="chatArea" class="chat-area" aria-live="polite"></div>
+  <div class="input-bar">
+    <textarea id="chatInput" rows="1" placeholder="メッセージを入力..."></textarea>
+    <button id="sendBtn" type="button" aria-label="送信">➤</button>
+  </div>
+
+  <script>
+    const API_URL = 'api.php';
+
+    const chatArea = document.getElementById('chatArea');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    const conversationHistory = [];
+
+    function esc(s){
+      return String(s).replace(/[&<>"']/g, (c)=>({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+    }
+
+    function cleanAIText(t) {
+      // 1. HTMLタグを除去（<strong> <em> <a> 等すべて）
+      t = t.replace(/<[^>]+>/g, '');
+      // 2. Markdownリンク [テキスト](URL) → テキストだけ残す
+      t = t.replace(/\[([^\]]*)\]\(https?:\/\/[^\s)]+\)/g, '$1');
+      // 3. 括弧で囲まれたドメイン引用 (example.com) を除去
+      t = t.replace(/\s*\([a-z0-9.-]+\.[a-z]{2,}\)\s*/gi, ' ');
+      // 4. 生URL（単独で残っているもの）を除去
+      t = t.replace(/https?:\/\/[^\s)）」\]]+/g, '');
+      // 5. 除去後にできた連続スペースや空行を整理
+      t = t.replace(/[ \t]+/g, ' ');
+      t = t.replace(/\n{3,}/g, '\n\n');
+      return t.trim();
+    }
+
+    function renderMarkdown(text){
+      let t = String(text ?? '');
+      t = t.replace(/\n{2,}/g, '\n');
+      t = t.replace(/\n{2,}/g, '\n');
+      t = t.replace(/\n{2,}/g, '\n');
+      t = t.replace(/\n{2,}/g, '\n');
+      t = t.replace(/\n{2,}/g, '\n');
+      t = t.replace(/\n{2,}/g, '\n');
+      t = t.replace(/\n{2,}/g, '\n');
+
+      // 連続改行を1つにまとめてから <br> にする
+      t = t.replace(/\n{2,}/g, '\n');
+      t = esc(t);
+
+      // コードブロック ``` ```
+      t = t.replace(/```([\s\S]*?)```/g, (m, code) => {
+        const c = code.replace(/^\n/, '').replace(/\n$/, '');
+        return '<pre style="background:#f6f8fa;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;overflow:auto;"><code>' + c + '</code></pre>';
+      });
+
+      // 見出し
+      t = t.replace(/^### (.*)$/gm, '<h3 style="margin:10px 0 6px;font-size:16px;">$1</h3>');
+      t = t.replace(/^## (.*)$/gm, '<h2 style="margin:10px 0 6px;font-size:18px;">$1</h2>');
+      t = t.replace(/^# (.*)$/gm, '<h1 style="margin:10px 0 6px;font-size:20px;">$1</h1>');
+
+      // 太字 / 斜体
+      t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      t = t.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+      // 水平線
+      t = t.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0;">');
+
+      // テーブル（簡易）
+      // ここでは安全のため、厳密なテーブル変換は行わず、| を含む行はそのまま表示
+      // リスト（簡易）
+      t = t.replace(/^\s*-\s+(.*)$/gm, '<div style="margin-left:14px;">• $1</div>');
+
+      // リンク [text](url) → テキスト部分だけ残す（リンクにしない）
+      t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1');
+
+      // 改行を <br> に
+      t = t.replace(/\n/g, '<br>');
+
+      return t;
+    }
+
+    function addMessage(role, text){
+      const msg = document.createElement('div');
+      msg.className = 'message ' + (role === 'user' ? 'user' : 'ai');
+
+      const icon = document.createElement('div');
+      icon.className = 'icon';
+      icon.textContent = role === 'user' ? '👤' : '🤖';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+
+      if (role === 'user') {
+        bubble.textContent = text;
+      } else {
+        const cleaned = cleanAIText(text);
+        const html = renderMarkdown(cleaned);
+        bubble.innerHTML = DOMPurify.sanitize(html);
+      }
+
+      msg.appendChild(icon);
+      msg.appendChild(bubble);
+      chatArea.appendChild(msg);
+      chatArea.scrollTop = chatArea.scrollHeight;
+
+      return bubble;
+    }
+
+    function showTypingIndicator(){
+      const wrap = document.createElement('div');
+      wrap.className = 'typing-indicator message ai';
+      wrap.dataset.typing = '1';
+
+      const icon = document.createElement('div');
+      icon.className = 'icon';
+      icon.textContent = '🤖';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+
+      bubble.appendChild(spinner);
+      wrap.appendChild(icon);
+      wrap.appendChild(bubble);
+
+      chatArea.appendChild(wrap);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function removeTypingIndicator(){
+      const el = chatArea.querySelector('.typing-indicator[data-typing="1"]');
+      if (el) el.remove();
+    }
+
+    function renderSources(bubble, sources){
+      if (!sources || !Array.isArray(sources) || sources.length === 0) return;
+      if (!bubble || !bubble.parentElement) return;
+      if (bubble.dataset.sourcesRendered) return;
+      bubble.dataset.sourcesRendered = '1';
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'sources-wrapper';
+
+      const toggle = document.createElement('div');
+      toggle.className = 'sources-toggle';
+      toggle.textContent = '引用元 ▽';
+
+      const content = document.createElement('div');
+      content.className = 'sources-content';
+
+      sources.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'source-item';
+
+        const a = document.createElement('a');
+        a.href = s.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = s.url;
+
+        item.appendChild(a);
+
+        if (s.quote) {
+          const q = document.createElement('div');
+          q.className = 'source-quote';
+          q.textContent = s.quote;
+          item.appendChild(q);
+        }
+        content.appendChild(item);
+      });
+
+      toggle.addEventListener('click', () => {
+        content.classList.toggle('open');
+        toggle.textContent = content.classList.contains('open') ? '引用元 △' : '引用元 ▽';
+      });
+
+      wrapper.appendChild(toggle);
+      wrapper.appendChild(content);
+
+      bubble.parentElement.insertAdjacentElement('afterend', wrapper);
+    }
+
+    async function sendMessage(){
+      let aiFullText = '';
+      let currentBubble = null;
+
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      addMessage('user', text);
+      chatInput.value = '';
+      chatInput.style.height = 'auto';
+      sendBtn.disabled = true;
+
+      showTypingIndicator();
+
+      conversationHistory.push({ role: 'user', content: text });
+
+      try{
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, history: conversationHistory })
+        });
+
+        if (!res.ok || !res.body) {
+          removeTypingIndicator();
+          currentBubble = addMessage('ai', 'エラーが発生しました。時間をおいて再度お試しください。');
+          sendBtn.disabled = false;
+          conversationHistory.push({ role: 'assistant', content: aiFullText });
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+
+        let buffer = '';
+        let isDone = false;
+
+        while(true){
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+
+          for (let i = 0; i < lines.length; i++){
+            const line = lines[i].trim();
+            if (!line.startsWith('data:')) continue;
+
+            const payload = line.slice(5).trim();
+            if (payload === '') continue;
+
+            if (payload === '[DONE]') {
+              isDone = true;
+              continue; // 同一チャンク内の残り行（sources）を処理してからループ終了
+            }
+
+            let data = null;
+            try { data = JSON.parse(payload); } catch(e){ continue; }
+
+            if (data && typeof data.text === 'string') {
+              if (!currentBubble) {
+                removeTypingIndicator();
+                currentBubble = addMessage('ai', '');
+              }
+              aiFullText += data.text;
+              const cleaned = cleanAIText(aiFullText);
+              const html = renderMarkdown(cleaned);
+              currentBubble.innerHTML = DOMPurify.sanitize(html);
+            }
+
+            if (data && Array.isArray(data.sources)) {
+              if (currentBubble) renderSources(currentBubble, data.sources);
+            }
+          }
+
+          if (isDone) break;
+        }
+
+        conversationHistory.push({ role: 'assistant', content: aiFullText });
+      }catch(e){
+        if (currentBubble === null) {
+          removeTypingIndicator();
+          currentBubble = addMessage('ai', '通信エラーが発生しました。時間をおいて再度お試しください。');
+        }
+      }finally{
+        sendBtn.disabled = false;
+        chatArea.scrollTop = chatArea.scrollHeight;
+      }
+    }
+
+    // 入力欄の自動伸縮
+    chatInput.addEventListener('input', () => {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+    });
+
+    // キーボード操作
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    sendBtn.addEventListener('click', () => sendMessage());
+
+    // 初期メッセージ（API呼び出しなし）
+    window.addEventListener('load', () => {
+      addMessage('ai', 'こんにちは！若葉保育園のことを何でもきいてね！');
+    });
+  </script>
+</body>
+</html>
